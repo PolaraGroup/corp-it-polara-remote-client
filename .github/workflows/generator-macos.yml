@@ -219,6 +219,8 @@ jobs:
           # Polara: no compile-time RustDesk -> name swap in src/lang. RustDesk swaps "RustDesk" for
           # app-name ("Polara Remote") when it shows text (src/lang.rs), and the compile-time swap
           # baked in the file-safe "PolaraRemote" and broke lookups of keys that contain "RustDesk".
+          # ...except "powered_by_me", which src/lang.rs deliberately leaves alone: set it here.
+          find ./src/lang -name "*.rs" -exec sed -i '' -e '/"powered_by_me"/s|RustDesk|${{ env.appdisplay }}|g' {} \;
            
           sed -i '' -e 's|https://rustdesk.com|${{ env.urlLink }}|' ./build.py
           sed -i '' -e "s|launchUrl(Uri.parse('https://rustdesk.com'));|launchUrl(Uri.parse('${{ env.urlLink }}'));|" ./flutter/lib/common.dart
@@ -623,6 +625,12 @@ jobs:
           # built-in settings (no WebSocket, no incoming-only, settings not hidden).
           echo -n '${{ env.custom }}' > "$APP/Contents/Resources/custom_.txt"
           ls -l "$APP/Contents/Resources/custom_.txt"
+          # Polara: the menu bar and Dock show CFBundleName / CFBundleDisplayName. The Info.plist
+          # sed earlier can't match (key and value are on separate lines), so set them on the
+          # built app. The bundle file name stays file-safe. Ad-hoc signing runs after this.
+          plutil -replace CFBundleName -string "${{ env.appdisplay }}" "$APP/Contents/Info.plist"
+          plutil -replace CFBundleDisplayName -string "${{ env.appdisplay }}" "$APP/Contents/Info.plist"
+          plutil -extract CFBundleName raw "$APP/Contents/Info.plist"
       
       - name: Install rcodesign tool
         if: env.MACOS_P12_BASE64 != null
