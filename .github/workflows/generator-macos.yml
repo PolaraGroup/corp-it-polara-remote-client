@@ -154,13 +154,39 @@ jobs:
           brew install imagemagick potrace nasm cmake gcc wget ninja
           echo "$(brew --prefix imagemagick)/bin" >> $GITHUB_PATH
 
+      - name: Polara display name
+        # Polara: rdgen passes only the file-safe name (spaces stripped, e.g. PolaraRemote). The
+        # display name ("Polara Remote") is app-name in the built-in settings; use it for
+        # on-screen text. File, bundle and exe names keep the file-safe name.
+        shell: bash
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_ENV"
+          import base64, json, os
+          raw = os.environ.get("CUSTOM_B64", "").strip()
+          name = os.environ.get("APPNAME", "")
+          try:
+              b = base64.b64decode(raw + "=" * (-len(raw) % 4))
+              for off in (0, 64):
+                  try:
+                      name = json.loads(b[off:]).get("app-name") or name
+                      break
+                  except ValueError:
+                      pass
+          except Exception:
+              pass
+          print("appdisplay=" + name)
+          EOF
+        env:
+          CUSTOM_B64: ${{ env.custom }}
+          APPNAME: ${{ env.appname }}
+
       - name: Update macOS Info.plist and settings
         continue-on-error: false
         shell: bash
         run: |
           # MACSTUFF Update Info.plist
           sed -i '' -e 's|<key>CFBundleName</key>.*<string>.*</string>|<key>CFBundleName</key>\n\t<string>${{ env.appname }}</string>|' ./flutter/macos/Runner/Info.plist
-          sed -i '' -e 's|<key>CFBundleDisplayName</key>.*<string>.*</string>|<key>CFBundleDisplayName</key>\n\t<string>${{ env.appname }}</string>|' ./flutter/macos/Runner/Info.plist
+          sed -i '' -e 's|<key>CFBundleDisplayName</key>.*<string>.*</string>|<key>CFBundleDisplayName</key>\n\t<string>${{ env.appdisplay }}</string>|' ./flutter/macos/Runner/Info.plist
           sed -i '' -e 's|<key>CFBundleIdentifier</key>.*<string>.*</string>|<key>CFBundleIdentifier</key>\n\t<string>com.${{ env.appname }}.app</string>|' ./flutter/macos/Runner/Info.plist
           
           # MACSTUFF Update AppInfo.xcconfig
@@ -190,8 +216,9 @@ jobs:
           # Update Podfile - keep the target as 'Runner'
           sed -i '' -e 's/target '"'"'Runner'"'"' do/target '"'"'Runner'"'"' do/' ./flutter/macos/Podfile
 
-          find ./src/lang -name "*.rs" -exec sed -i '' -e 's|RustDesk|${{ env.appname }}|' {} \;
-          sed -i '' -e 's|RustDesk|${{ env.appname }}|' ./src/lang/nl.rs
+          # Polara: no compile-time RustDesk -> name swap in src/lang. RustDesk swaps "RustDesk" for
+          # app-name ("Polara Remote") when it shows text (src/lang.rs), and the compile-time swap
+          # baked in the file-safe "PolaraRemote" and broke lookups of keys that contain "RustDesk".
            
           sed -i '' -e 's|https://rustdesk.com|${{ env.urlLink }}|' ./build.py
           sed -i '' -e "s|launchUrl(Uri.parse('https://rustdesk.com'));|launchUrl(Uri.parse('${{ env.urlLink }}'));|" ./flutter/lib/common.dart
@@ -213,15 +240,15 @@ jobs:
           sed -i -e 's|$downloadUrl/$downloadFile|${{ env.downloadLink }}|' ./flutter/lib/desktop/widgets/update_progress.dart
           
           # Update slogan - About in en.rs 
-          sed -i '' -e 's/("Slogan_tip", "Made with heart in this chaotic world!")/("Slogan_tip", "Powered by ${{ env.appname }}")/' ./src/lang/en.rs
-          sed -i '' -e 's/("About RustDesk", "")/("About RustDesk", "About ${{ env.appname }}")/' ./src/lang/en.rs
+          sed -i '' -e 's/("Slogan_tip", "Made with heart in this chaotic world!")/("Slogan_tip", "Powered by ${{ env.appdisplay }}")/' ./src/lang/en.rs
+          sed -i '' -e 's/("About RustDesk", "")/("About RustDesk", "About ${{ env.appdisplay }}")/' ./src/lang/en.rs
           
 
           # Update slogan - About in nl.rs
-          sed -i '' -e 's/("Slogan_tip", "Ontwikkeld met het hart voor deze chaotische wereld!")/("Slogan_tip", "Powered by ${{ env.appname }}")/' ./src/lang/nl.rs
-          sed -i '' -e 's/("Your Desktop", "Uw Bureaublad")/("Your Desktop", "Uw ${{ env.appname }}")/' ./src/lang/nl.rs
-          sed -i '' -e 's/("About RustDesk", "Over RustDesk")/("About RustDesk", "Over ${{ env.appname }}")/' ./src/lang/nl.rs
-          sed -i '' -e 's/("About", "Over")/("About", "Over ${{ env.appname }}")/' ./src/lang/nl.rs
+          sed -i '' -e 's/("Slogan_tip", "Ontwikkeld met het hart voor deze chaotische wereld!")/("Slogan_tip", "Powered by ${{ env.appdisplay }}")/' ./src/lang/nl.rs
+          sed -i '' -e 's/("Your Desktop", "Uw Bureaublad")/("Your Desktop", "Uw ${{ env.appdisplay }}")/' ./src/lang/nl.rs
+          sed -i '' -e 's/("About RustDesk", "Over RustDesk")/("About RustDesk", "Over ${{ env.appdisplay }}")/' ./src/lang/nl.rs
+          sed -i '' -e 's/("About", "Over")/("About", "Over ${{ env.appdisplay }}")/' ./src/lang/nl.rs
             
           # Update pubspec.yaml with proper YAML formatting
           cp ./flutter/pubspec.yaml ./flutter/pubspec.yaml.bak
